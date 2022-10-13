@@ -9,8 +9,9 @@ module.exports = (app) => {
   app.log.info("Yay, the app was loaded!");
   
   app.on(['pull_request.opened', 'pull_request.edited','pull_request.reopened', 'pull_request.ready_for_review','pull_request.synchronize','pull_request.labeled'], async (context) =>{
-    let release_contract_yamp_obj, pr_user_stories_list, repo_json
+    let release_contract_yamp_obj, repo_json
     var release_contract_user_stories_array = new Array()
+    var pr_user_stories_list = new Array()
     try {
       // Release Contract stuff below
       // parse release contract file
@@ -47,6 +48,8 @@ module.exports = (app) => {
       // read PR content- title and body
       try{
       const pr_content_payload = context.payload.pull_request.title.concat('\n', context.payload.pull_request.body)
+      
+      
       // search for artifact pattern
       pr_user_stories_list = Array.from(getUserStoriesList(pr_content_payload))
       } catch(error) {
@@ -64,7 +67,7 @@ module.exports = (app) => {
       let result = await chekLogic(context, release_contract_user_stories_array, pr_user_stories_list)
 
       // Update Check with Resolution
-      await resolveCheck(context, checkRun, result, repo_json.owner, repo_json.repo)
+      await resolveCheck(context, checkRun, result, repo_json.owner, repo_json.repo, app)
       }catch(error){
         app.log.debug(error)
         await resolveCheck(context, checkRun, 'skipped', repo_json.owner, repo_json.repo)
@@ -96,11 +99,14 @@ async function createCheckRun(context, source_repo_owner, source_repo) {
   })
 }
 
-async function chekLogic(context, rc_us_array, pr_us_array) {
+async function chekLogic(context, rc_us_array, pr_us_array, app) {
   const filteredArray = Array.from(rc_us_array.filter(value => pr_us_array.includes(value)));
-  if(filteredArray.length > 0){
+  if(filteredArray.length > 0 && filteredArray.length == pr_us_array.length){
     return "success"
   }
+  
+  
+  
   return "failure"
 }
 
@@ -131,6 +137,6 @@ async function resolveCheck(context, checkRun, result, source_repo_owner, source
  * @returns {Array} Array of user stories present in the message string
  */
 function getUserStoriesList(message){
-   const user_stories_regex = /[US|us].[0-9]*/gm;
+   const user_stories_regex = /(US|us).[0-9]*/gm;
    return message.match(user_stories_regex);
 }
