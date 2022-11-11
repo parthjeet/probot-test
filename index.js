@@ -28,7 +28,7 @@ module.exports = (app) => {
       check_status = await chekLogic(context)
     } catch (error) {
       app.log.debug(error)
-      check_status = "skipped"
+      check_status = "failure"
     }
     finally {
       // finalize check run
@@ -66,7 +66,14 @@ async function chekLogic(context) {
   // release contract stuff below
   var repo_json = context.repo({ path: 'release-contract.yml' });
   var release_contract_user_stories_array = new Array()
-  const release_contract_content_response_json = await context.octokit.repos.getContent({ owner: `${repo_json.owner}`, repo: `${repo_json.repo}`, path: 'release-contract.yml' });
+  var release_contract_content_response_json
+  try {
+    release_contract_content_response_json = await context.octokit.repos.getContent({ owner: `${repo_json.owner}`, repo: `${repo_json.repo}`, path: 'release-contract.yml' });
+  } catch (error) {
+    check_status = "failure"
+    throw error
+  }
+  
   const release_contract_content_utf8 = Buffer.from(release_contract_content_response_json.data.content, 'base64').toString('utf8')
   var release_contract_yamp_obj = yaml.load(release_contract_content_utf8)
   var release_name_string = release_contract_yamp_obj['Release']
