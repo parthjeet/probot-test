@@ -62,28 +62,41 @@ async function createCheckRun(context) {
   })
 }
 
+
 async function chekLogic(context) {
   // release contract stuff below
+  var prBranches = await getPRBranches(context)
   var repo_json = context.repo({ path: 'release-contract.yml' });
-  var release_contract_user_stories_array = new Array()
-  var release_contract_content_response_json
+  var release_contract_user_stories_set = new Set()
+  var head_release_contract_content_response_json
+  var base_release_contract_content_response_json
   try {
-    release_contract_content_response_json = await context.octokit.repos.getContent({ owner: `${repo_json.owner}`, repo: `${repo_json.repo}`, path: 'release-contract.yml' });
+    head_release_contract_content_response_json = await context.octokit.repos.getContent({ owner: `${repo_json.owner}`, repo: `${repo_json.repo}`, path: 'release-contract.yml', 'ref': `${prBranches.head}` });
+    base_release_contract_content_response_json = await context.octokit.repos.getContent({ owner: `${repo_json.owner}`, repo: `${repo_json.repo}`, path: 'release-contract.yml', 'ref': `${prBranches.base}` });
   } catch (error) {
     check_status = "failure"
     throw error
   }
   
-  const release_contract_content_utf8 = Buffer.from(release_contract_content_response_json.data.content, 'base64').toString('utf8')
-  var release_contract_yamp_obj = yaml.load(release_contract_content_utf8)
-  var release_name_string = release_contract_yamp_obj['Release']
-  const release_contract_features_array = Array.from(release_contract_yamp_obj['Features'])
-  release_contract_features_array.forEach(feature => {
+  const head_release_contract_content_utf8 = Buffer.from(head_release_contract_content_response_json.data.content, 'base64').toString('utf8')
+  const base_release_contract_content_utf8 = Buffer.from(base_release_contract_content_response_json.data.content, 'base64').toString('utf8')
+  var head_release_contract_yamp_obj = yaml.load(head_release_contract_content_utf8)
+  var base_release_contract_yamp_obj = yaml.load(base_release_contract_content_utf8)
+  const head_release_contract_features_array = Array.from(head_release_contract_yamp_obj['Features'])
+  head_release_contract_features_array.forEach(feature => {
     var feature_user_stories_array = Array.from(feature['UserStories'])
     feature_user_stories_array.forEach(user_story =>{
-      release_contract_user_stories_array.push(user_story)
+      release_contract_user_stories_set.add(user_story.trim())
     })
   })
+  const base_release_contract_features_array = Array.from(base_release_contract_yamp_obj['Features'])
+  base_release_contract_features_array.forEach(feature => {
+    var feature_user_stories_array = Array.from(feature['UserStories'])
+    feature_user_stories_array.forEach(user_story =>{
+      release_contract_user_stories_set.add(user_story.trim())
+    })
+  })
+  const release_contract_user_stories_array = Array.from(release_contract_user_stories_set)
 
   // pr stuff below
   var pr_user_stories_list = new Array()
@@ -142,4 +155,18 @@ async function getPrPayload(context){
   }
   if(context.payload.pull_request.body == null) {context.payload.pull_request.body = ""}
   return context.payload.pull_request.title.concat('\n', context.payload.pull_request.body)
+}
+
+async function getPRBranches(context){
+  var prBranches = new Object()
+
+  if(context.payload.pull_request == null){
+    var pr = await context.octokit.request({method: "GET", url: context.payload.check_run.check_suite.pull_requests[0].url})
+    prBranches.head = pr.data.head.ref
+    prBranches.base = pr.data.base.ref
+    return prBranches 
+  }
+  prBranches.head = context.payload.pull_request.head.ref
+  prBranches.base = context.payload.pull_request.base.ref
+  return prBranches 
 }
